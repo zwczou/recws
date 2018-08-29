@@ -4,7 +4,6 @@ package recws
 
 import (
 	"errors"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/jpillora/backoff"
+	log "github.com/sirupsen/logrus"
 )
 
 // ErrNotConnected is returned when the application read/writes
@@ -144,21 +144,27 @@ func (rc *RecConn) WriteJSON(v interface{}) error {
 // (Cookie). Use GetHTTPResponse() method for the response.Header to get
 // the selected subprotocol (Sec-WebSocket-Protocol) and cookies (Set-Cookie).
 func (rc *RecConn) Dial(urlStr string, reqHeader http.Header) {
+	fields := log.Fields{
+		"url":    urlStr,
+		"method": "dial",
+		"type":   "websocket",
+	}
 	if urlStr == "" {
-		log.Fatal("Dial: Url cannot be empty")
+		log.WithFields(fields).Fatal("url cannot be empty")
 	}
 	u, err := url.Parse(urlStr)
 
 	if err != nil {
-		log.Fatal("Url:", err)
+		fields["error"] = err.Error()
+		log.WithFields(fields).Fatal("url.Parse error")
 	}
 
 	if u.Scheme != "ws" && u.Scheme != "wss" {
-		log.Fatal("Url: websocket URIs must start with ws or wss scheme")
+		log.WithFields(fields).Fatal("websocket URIs must start with ws or wss scheme")
 	}
 
 	if u.User != nil {
-		log.Fatal("Url: user name and password are not allowed in websocket URIs")
+		log.WithFields(fields).Fatal("user name and password are not allowed in websocket URIs")
 	}
 
 	rc.url = urlStr
@@ -199,6 +205,12 @@ func (rc *RecConn) connect() {
 		Jitter: true,
 	}
 
+	fields := log.Fields{
+		"url":    rc.url,
+		"method": "connect",
+		"type":   "websocket",
+	}
+
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	for {
@@ -215,22 +227,16 @@ func (rc *RecConn) connect() {
 
 		if rc.IsConnected() && rc.handleConnect != nil {
 			err = rc.handleConnect(rc)
-			if err != nil {
-				log.Printf("Dial: handleConnect failed with %s\n", err)
-				continue
-			}
 		}
 
 		if err == nil {
-			if !rc.NonVerbose {
-				log.Printf("Dial: connection was successfully established with %s\n", rc.url)
-			}
+			delete(fields, "error")
+			log.WithFields(fields).Debug("connection was successfully established")
 			break
 		} else {
-			if !rc.NonVerbose {
-				log.Println(err)
-				log.Println("Dial: will try again in", nextItvl, "seconds.")
-			}
+			fields["error"] = err.Error()
+			fields["sleep_time"] = nextItvl
+			log.WithFields(fields).Debug("will try again")
 		}
 
 		time.Sleep(nextItvl)

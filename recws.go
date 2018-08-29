@@ -194,7 +194,7 @@ func (rc *RecConn) Dial(urlStr string, reqHeader http.Header) {
 	}()
 
 	// wait on first attempt
-	time.Sleep(rc.HandshakeTimeout)
+	//time.Sleep(rc.HandshakeTimeout)
 }
 
 func (rc *RecConn) connect() {

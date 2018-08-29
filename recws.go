@@ -44,6 +44,8 @@ type RecConn struct {
 	isConnected bool
 	dialer      *websocket.Dialer
 
+	handleConnect func(*RecConn) error
+
 	*websocket.Conn
 }
 
@@ -81,6 +83,25 @@ func (rc *RecConn) ReadMessage() (messageType int, message []byte, err error) {
 	}
 
 	return
+}
+
+// ReadJSON reads the next JSON-encoded message from the connection and stores
+// it in the value pointed to by v.
+//
+// See the documentation for the encoding/json Unmarshal function for details
+// about the conversion of JSON to a Go value.
+//
+// If the connection is closed ErrNotConnected is returned
+func (rc *RecConn) ReadJSON(v interface{}) error {
+	err := ErrNotConnected
+	if rc.IsConnected() {
+		err = rc.Conn.ReadJSON(v)
+		if err != nil {
+			rc.closeAndRecconect()
+		}
+	}
+
+	return err
 }
 
 // WriteMessage is a helper method for getting a writer using NextWriter,
@@ -160,6 +181,7 @@ func (rc *RecConn) Dial(urlStr string, reqHeader http.Header) {
 
 	rc.dialer = websocket.DefaultDialer
 	rc.dialer.HandshakeTimeout = rc.HandshakeTimeout
+	rc.reqHeader = reqHeader
 
 	go func() {
 		rc.connect()
@@ -190,6 +212,14 @@ func (rc *RecConn) connect() {
 		rc.isConnected = err == nil
 		rc.httpResp = httpResp
 		rc.mu.Unlock()
+
+		if rc.IsConnected() && rc.handleConnect != nil {
+			err = rc.handleConnect(rc)
+			if err != nil {
+				log.Printf("Dial: handleConnect failed with %s\n", err)
+				continue
+			}
+		}
 
 		if err == nil {
 			if !rc.NonVerbose {
@@ -232,4 +262,12 @@ func (rc *RecConn) IsConnected() bool {
 	defer rc.mu.Unlock()
 
 	return rc.isConnected
+}
+
+func (rc *RecConn) ConnectHandler() func(*RecConn) error {
+	return rc.handleConnect
+}
+
+func (rc *RecConn) SetConnectHandler(f func(*RecConn) error) {
+	rc.handleConnect = f
 }

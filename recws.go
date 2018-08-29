@@ -236,7 +236,7 @@ func (rc *RecConn) connect() {
 		} else {
 			fields["error"] = err.Error()
 			fields["sleep_time"] = nextItvl
-			log.WithFields(fields).Debug("will try again")
+			log.WithFields(fields).Warn("will try again")
 		}
 
 		time.Sleep(nextItvl)

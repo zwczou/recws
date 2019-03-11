@@ -21,6 +21,7 @@ var ErrNotConnected = errors.New("websocket: not connected")
 
 // The RecConn type represents a Reconnecting WebSocket connection.
 type RecConn struct {
+	sync.RWMutex
 	// RecIntvlMin specifies the initial reconnecting interval,
 	// default to 2 seconds
 	RecIntvlMin time.Duration
